@@ -14,7 +14,6 @@ class MerchantRegisterTest extends TestCase
     public function test_making_an_api_request_return_422(): void
     {
         $response = $this->postJson('/api/v2/merchant-register', []);
-
         $response->assertStatus(422);
     }
 
