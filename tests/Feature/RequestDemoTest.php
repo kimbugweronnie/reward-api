@@ -10,8 +10,7 @@ use Tests\TestCase;
 class RequestDemoTest extends TestCase
 {
     use RefreshDatabase, WithFaker;
-
-
+    
     public function test_create_request_demo_return_422()
     {
         $response = $this->postJson('/api/v2/request-demo', [
