@@ -1,0 +1,51 @@
+# .github/workflows/laravel-tests.yml
+
+name: Run Laravel Tests
+
+on: 
+  push:   # Run the tests on push to any branch
+    branches:
+      - '*'  
+  pull_request:  # Also run tests on pull requests
+    branches:
+      - '*'
+
+jobs:
+  run-tests:
+    runs-on: ubuntu-latest
+
+    services:
+      mysql:   # Setup MySQL for testing
+        image: mysql:5.7
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.1'  # Specify your PHP version here
+        extensions: mbstring, pdo, mysql
+        coverage: none
+
+    - name: Install dependencies
+      run: composer install --prefer-dist --no-progress --no-suggest --no-interaction
+
+    - name: Copy .env.testing
+      run: cp .env .env
+
+    - name: Generate application key
+      run: php artisan key:generate
+
+    - name: Run Migrations
+      run: php artisan migrate --env=testing
+
+    - name: Run Tests
+      run: php artisan test --env=testing
