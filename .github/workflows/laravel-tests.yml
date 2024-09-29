@@ -1,51 +1,35 @@
-# .github/workflows/laravel-tests.yml
+name: Laravel
 
-name: Run Laravel Tests
-
-on: 
-  push:   # Run the tests on push to any branch
-    branches:
-      - '*'  
-  pull_request:  # Also run tests on pull requests
-    branches:
-      - '*'
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
-  run-tests:
+  laravel-tests:
+
     runs-on: ubuntu-latest
 
-    services:
-      mysql:   # Setup MySQL for testing
-        image: mysql:5.7
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: testing
-        ports:
-          - 3306:3306
-        options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
-
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
-
-    - name: Set up PHP
-      uses: shivammathur/setup-php@v2
+    - uses: shivammathur/setup-php@15c43e89cdef867065b0213be354c2841860869e
       with:
-        php-version: '8.1'  # Specify your PHP version here
-        extensions: mbstring, pdo, mysql
-        coverage: none
-
-    - name: Install dependencies
-      run: composer update --prefer-dist --no-progress --no-suggest --no-interaction
-
-    - name: Copy .env.testing
-      run: cp .env.example .env
-
-    - name: Generate application key
+        php-version: '8.0'
+    - uses: actions/checkout@v4
+    - name: Copy .env
+      run: php -r "file_exists('.env') || copy('.env.example', '.env');"
+    - name: Install Dependencies
+      run: composer update -q --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+    - name: Generate key
       run: php artisan key:generate
-
-    - name: Run Migrations
-      run: php artisan migrate --env=testing
-
-    - name: Run Tests
-      run: php artisan test --env=testing
+    - name: Directory Permissions
+      run: chmod -R 777 storage bootstrap/cache
+    - name: Create Database
+      run: |
+        mkdir -p database
+        touch database/database.sqlite
+    - name: Execute tests (Unit and Feature tests) via PHPUnit/Pest
+      env:
+        DB_CONNECTION: sqlite
+        DB_DATABASE: database/database.sqlite
+      run: php artisan test
