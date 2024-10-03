@@ -17,17 +17,17 @@ class UserController extends Controller
         $this->userservice = $userservice;
     }
 
-    public function index(): object
+    public function index()
     {
         return $this->userservice->getcustomers();
     }
 
-    public function login(LoginRequest $request): object
+    public function login(LoginRequest $request)
     {
         return $this->userservice->login($request);
     }
 
-    public function store(UserRequest $request): object
+    public function store(UserRequest $request)
     {
         return $this->userservice->registration($request->validated());
     }
@@ -41,12 +41,12 @@ class UserController extends Controller
     {
     }
 
-    public function update(UserUpdateRequest $request, $id): object
+    public function update(UserUpdateRequest $request, $id)
     {
         return $this->userservice->updatecustomer($request, $id);
     }
 
-    public function destroy($id): object
+    public function destroy($id)
     {
         return $this->userservice->destroy($id);
     }

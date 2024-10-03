@@ -16,37 +16,37 @@ class TransactionController extends Controller
         $this->transactionService = $transactionService; 
     }
    
-    public function index():object
+    public function index()
     {
         return $this->transactionService->getTransactions();
     }
 
-    public function earn(TransactionRequest $request):object
+    public function earn(TransactionRequest $request)
     {
         return $this->transactionService->earnPoints($request->validated());
     }
 
-    public function show($id):object
+    public function show($id)
     {
         return $this->transactionService->getTransaction($id);
     }
 
-    public function spend(SpendTransactionRequest $request):object
+    public function spend(SpendTransactionRequest $request)
     {
         return $this->transactionService->spendPoints($request->validated());
     }
 
-    public function getPoints($id):object
+    public function getPoints($id)
     {
         return $this->transactionService->getPoints($id);
     }
 
-    public function getPointsEarned($id):object
+    public function getPointsEarned($id)
     {
         return $this->transactionService->getPointsEarned($id);
     }
 
-    public function getPointsSpent($id):object
+    public function getPointsSpent($id)
     {
         return $this->transactionService->getPointsSpent($id);
     }

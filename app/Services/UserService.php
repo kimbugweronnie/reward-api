@@ -39,7 +39,7 @@ class UserService extends Controller
     /**
      * Handle user registration
      */
-    public function registration($request):object
+    public function registration($request)
     {
         $user = $this->createUser($request);
         $role = $this->fetchRole($request);
@@ -52,7 +52,7 @@ class UserService extends Controller
     /**
      * Create a new user
      */
-    public function createUser($request):object
+    public function createUser($request)
     {
         return $this->user->create([
             'email' => $request['email'],
@@ -65,7 +65,7 @@ class UserService extends Controller
     /**
      * Create verification record for a user
      */
-    public function createUserVerify($user):object
+    public function createUserVerify($user)
     {
         $userverify = $this->userverify->create(['user_id' => $user->id, 'token' => Str::random(60)]);
         $this->sendVerificationEmail($userverify);
@@ -75,7 +75,7 @@ class UserService extends Controller
     /**
      * Fetch the role for a user
      */
-    public function fetchRole($user_type):object
+    public function fetchRole($user_type)
     {
         return Role::where('name', $user_type)->first();
     }
@@ -83,7 +83,7 @@ class UserService extends Controller
     /**
      * Handle login request
      */
-    public function login($request):object
+    public function login($request)
     {
         return $this->authenticate($request->email, $request->password);
     }
@@ -91,7 +91,7 @@ class UserService extends Controller
     /**
      * Authenticate user credentials
      */
-    public function authenticate($email, $password):object
+    public function authenticate($email, $password)
     {
         if (!$user = $this->attemptLogin($email, $password)) {
             return $this->messageSubscription('Wrong credentials', 401);
@@ -103,7 +103,7 @@ class UserService extends Controller
     /**
      * Attempt to log the user in
      */
-    public function attemptLogin($email, $password):object
+    public function attemptLogin($email, $password)
     {
         if (!Auth::attempt(['email' => $email, 'password' => $password])) {
             return null;
@@ -114,7 +114,7 @@ class UserService extends Controller
     /**
      * Generate access token for the authenticated user
      */
-    public function generateAccessToken($user):array
+    public function generateAccessToken($user)
     {
         $tokenResult = $user->createToken('AccessToken', ['*']);
         $details = $this->getCustomerDetails($user->id);
@@ -127,7 +127,7 @@ class UserService extends Controller
     /**
      * Fetch user details by email
      */
-    private function userByEmail($email):object
+    private function userByEmail($email)
     {
         return $this->user->where('email', $email)->first();
     }
@@ -135,7 +135,7 @@ class UserService extends Controller
     /**
      * Fetch customer details for a user
      */
-    public function getCustomerDetails($userId):object
+    public function getCustomerDetails($userId)
     {
         $customer = $this->customer->customerUser($userId);
         $merchant = $this->merchant->merchantUser($userId);
@@ -151,7 +151,7 @@ class UserService extends Controller
     /**
      * Prepare customer response
      */
-    private function prepareCustomerResponse($customer):array
+    private function prepareCustomerResponse($customer)
     {
         return [
             'id' => $customer->id,
@@ -164,7 +164,7 @@ class UserService extends Controller
     /**
      * Prepare merchant response
      */
-    public function prepareMerchantResponse($merchant):array
+    public function prepareMerchantResponse($merchant)
     {
         return [
             'id' => $merchant->id,
@@ -176,7 +176,7 @@ class UserService extends Controller
     /**
      * Get user programs
      */
-    public function getPrograms($userId):array
+    public function getPrograms($userId)
     {
         $programs = [];
         foreach ($this->subscriptionPrograms($userId) as $program) {
@@ -188,7 +188,7 @@ class UserService extends Controller
     /**
      * Fetch subscription programs for a user
      */
-    private function subscriptionPrograms($userId):object
+    private function subscriptionPrograms($userId)
     {
         return $this->subscription->userSubscriptions($userId);
     }
@@ -196,7 +196,7 @@ class UserService extends Controller
     /**
      * Fetch specific program for a user
      */
-    public function userProgram($programId):object
+    public function userProgram($programId)
     {
         return $this->program->program($programId);
     }
@@ -204,7 +204,7 @@ class UserService extends Controller
     /**
      * Get user merchants
      */
-    public function getMerchants($userId):array
+    public function getMerchants($userId)
     {
         $merchantIds = [];
         $userMerchants = [];
@@ -223,7 +223,7 @@ class UserService extends Controller
     /**
      * Delete user
      */
-    public function destroy($id):object
+    public function destroy($id)
     {
         $this->user->destroy($id);
         return $this->messageSubscription('User deleted successfully', 200);

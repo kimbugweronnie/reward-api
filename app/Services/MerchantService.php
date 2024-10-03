@@ -165,50 +165,50 @@ class MerchantService extends Controller
         );
     }
 
-    private function assignRoleToUser($user, $roleName):void
+    private function assignRoleToUser($user, $roleName)
     {
         $role = Role::where('name', $roleName)->first();
         $user->assignRole($role);
     }
 
-    private function handleDuplicateEmailError():object
+    private function handleDuplicateEmailError()
     {
         return $this->messageSubscription('Duplicate Email', 403);
     }
 
-    private function getMerchantPrograms($id):object
+    private function getMerchantPrograms($id)
     {
         return $this->program->merchantPrograms($id);
     }
 
-    private function findMerchantById($id):object
+    private function findMerchantById($id)
     {
         return $this->merchant->merchant($id);
     }
 
-    private function getUniqueSubscribers($merchant_id):array
+    private function getUniqueSubscribers($merchant_id)
     {
         $subscribers = $this->subscription->subscribers($merchant_id);
         $uniqueSubscribers = array_unique(array_column($subscribers->toArray(), 'user_id'));
         return $uniqueSubscribers;
     }
 
-    private function getActivePrograms($merchant_id):object
+    private function getActivePrograms($merchant_id)
     {
         return $this->program->activePrograms($merchant_id);
     }
 
-    private function getInactivePrograms($merchant_id):object
+    private function getInactivePrograms($merchant_id)
     {
         return $this->program->inactivePrograms($merchant_id);
     }
 
-    private function getMerchantPoints($merchant_id):object
+    private function getMerchantPoints($merchant_id)
     {
         return $this->program->getPoints($merchant_id);
     }
 
-    private function getRedeemedPoints($merchant_id):object
+    private function getRedeemedPoints($merchant_id)
     {
         return $this->point->pointsRedeemed($merchant_id);
     }
@@ -218,7 +218,7 @@ class MerchantService extends Controller
         return $totalPoints - $redeemedPoints;
     }
 
-    private function getExpiredPoints($merchant_id):object
+    private function getExpiredPoints($merchant_id)
     {
         return $this->program->expiredPoints($merchant_id);
     }

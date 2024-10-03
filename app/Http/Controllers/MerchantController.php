@@ -16,57 +16,57 @@ class MerchantController extends Controller
         $this->merchantService = $merchantService; 
     }
    
-    public function index():object
+    public function index()
     {
         return $this->merchantService->getMerchants();
     }
 
-    public function subscribers($id):object
+    public function subscribers($id)
     {
         return $this->merchantService->getSubscribers($id);
     }
 
-    public function programs($id):object
+    public function programs($id)
     {
         return $this->merchantService->getPrograms($id);
     }
 
-    public function activePrograms($id):object
+    public function activePrograms($id)
     {
         return $this->merchantService->activePrograms($id);
     }
 
-    public function inactivePrograms($id):object
+    public function inactivePrograms($id)
     {
         return $this->merchantService->inactivePrograms($id);
     }
 
-    public function getPoints($id):object
+    public function getPoints($id)
     {
         return $this->merchantService->getPoints($id);
     }
 
-    public function unRedeemedPoints($id):object
+    public function unRedeemedPoints($id)
     {
         return $this->merchantService->unRedeemedPoints($id);
     }
 
-    public function pointsRedeemed($id):object
+    public function pointsRedeemed($id)
     {
         return $this->merchantService->pointsRedeemed($id); 
     }
 
-    public function expiredPoints($id):object
+    public function expiredPoints($id)
     {
         return $this->merchantService->expiredPoints($id); 
     }
     
-    public function store(MerchantRequest $request):object
+    public function store(MerchantRequest $request)
     {
         return $this->merchantService->createMerchant($request->validated());
     }
 
-    public function show($id):object
+    public function show($id)
     {
         return $this->merchantService->getMerchant($id);
     }
