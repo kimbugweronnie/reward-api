@@ -14,6 +14,20 @@ use App\Http\Resources\TransactionResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Str;
 
+namespace App\Services;
+
+use App\Models\Transaction;
+use App\Models\Subscription;
+use App\Models\Point;
+use App\Models\Program;
+use App\Models\Merchant;
+use App\Models\User;
+use App\Http\Requests\TransactionRequest;
+use App\Http\Requests\SpendTransactionRequest;
+use Illuminate\Support\Facades\Auth;
+use App\Http\Resources\ProgramResource;
+use App\Http\Resources\TransactionResource;
+use App\Http\Controllers\Controller;
 
 class TransactionService extends Controller
 {
@@ -24,7 +38,8 @@ class TransactionService extends Controller
     private $merchant;
     private $user;
 
-    public function __construct(Transaction $transaction, Subscription $subscription,Point $point,Program $program,Merchant $merchant,User $user) {
+    public function __construct(Transaction $transaction, Subscription $subscription, Point $point, Program $program, Merchant $merchant, User $user)
+    {
         $this->transaction = $transaction;
         $this->subscription = $subscription;
         $this->point = $point;
@@ -33,106 +48,199 @@ class TransactionService extends Controller
         $this->user = $user;
     }
 
-    public function earnPoints($request)
-    {
-        $subscription = $this->subscription->subscription($request['subscription_id'],$request['user_id']);
-        if($subscription){
-            $program = $this->program->program($request['program_id']);
-            if($program->status == 0){
-                return $this->sendResponse('The program is inactive', 200);
-            }else{
-                $user = $this->user->user($request['user_id']); 
-                $createdpoints = $this->point->earnPoints($request);
-                $balance = $user->points + intval($request['points_awarded']);
-                $this->user->updatePoints($request['user_id'],$balance);
-                return $this->sendResponse($createdpoints, 201);
-            }  
-        }else{
-            return $this->sendMessage("Please Subscribe", 200);
-        }
-    }
+   
 
-    public function spendPoints($request)
+    public function earnPoints($request):object
     {
-        $program = $this->program->program($request['program_id']);
-        if($program->status == 0){
+        $subscription = $this->getSubscription($request);
+        $program = $this->getUserProgram($request['program_id']);
+
+        if ($this->isProgramInactive($program)) {
             return $this->sendResponse('The program is inactive', 200);
-        }else{
-            $user = $this->user->user($request['user_id']); 
-            $createdpoints = $this->point->earnPoints($request);
-            $balance = $user->points - intval($request['points_used']);
-            $this->user->updatePoints($request['user_id'],$balance);
-            return $this->sendResponse($createdpoints, 201);
-        }  
+        }
+
+        if ($subscription) {
+            return $this->createAndSendPoints($request);
+        }
+
+        return $this->sendMessage('Please Subscribe', 200);
     }
 
-    public function getPoints($id)
+    public function spendPoints($request):object
     {
-        $merchants = [];
-        $usermerchants = $this->getMerchants($id);
-        foreach ($usermerchants as $usermerchant) {
-            $pointsEarned = $this->point->pointsMerchants($id,$usermerchant->id);
-            $pointsSpent = $this->point->pointsSpentMerchant($id,$usermerchant->id);
-            $balance = $pointsEarned - $pointsSpent;
-            array_push($merchants,['merchant_id' => $usermerchant->id, 'merchant_name' => $usermerchant->merchant_name,'points' => intval($balance)]);
+        $program = $this->getUserProgram($request['program_id']);
+        if ($this->isProgramInactive($program)) {
+            return $this->sendResponse('The program is inactive', 200);
         }
+
+        return $this->createAndSendPoints($request);
+    }
+
+    public function updatePoints($request):void
+    {
+        $user = $this->getUser($request['user_id']);
+        $balance = $this->calculateNewPointsBalance($user, $request['points_used']);
+        $this->updateUserPoints($request['user_id'], $balance);
+    }
+
+    public function getPoints($id):object
+    {
+        $merchants = $this->getUserMerchantsPoints($id);
         return $this->sendResponse($merchants, 200);
     }
 
-    public function getMerchants($id)
+    public function getPointsEarned($id):object
     {
-        $merchantids = [];
-        $usermerchants = [];
-        $subscriptionprograms = $this->subscription->userSubscriptions($id);
-        foreach ($subscriptionprograms as $program) {
-            $userprogram = $this->program->program($program['program_id']);
-            array_push($merchantids,$userprogram->merchant_id);
-        }
-        $merchants = array_unique($merchantids);
-        foreach ($merchants as $merchant) {
-            array_push($usermerchants,$this->merchant->merchant($merchant));
-        } 
-        return $usermerchants;   
-    }
-
-    public function getPointsEarned($id)
-    {
-        $merchants = [];
-        $usermerchants = $this->getMerchants($id);
-        foreach ($usermerchants as $usermerchant) {
-            $pointsEarned = $this->point->pointsMerchants($id,$usermerchant->id);
-            array_push($merchants,['merchant_id' => $usermerchant->id, 'merchant_name' => $usermerchant->merchant_name,'points' => intval($pointsEarned)]);
-        }
+        $merchants = $this->getUserMerchantsPointsEarned($id);
         return $this->sendResponse($merchants, 200);
     }
 
-    public function getPointsSpent($id)
+    public function getPointsSpent($id):object
     {
-        $merchants = [];
-        $usermerchants = $this->getMerchants($id);
-        foreach ($usermerchants as $usermerchant) {
-            $pointsSpent = $this->point->pointsSpentMerchant($id,$usermerchant->id);
-            array_push($merchants,['merchant_id' => $usermerchant->id, 'merchant_name' => $usermerchant->merchant_name,'points' => intval($pointsSpent)]);
-        }
+        $merchants = $this->getUserMerchantsPointsSpent($id);
         return $this->sendResponse($merchants, 200);
     }
 
-    public function getTransactions()
+    public function getTransactions():object
     {
-        $transactions = $this->transaction->all();  
+        $transactions = $this->getAllTransactions();
         return $this->sendResponse($transactions, 200);
     }
 
-    public function getTransaction($id)
+    public function getTransaction($id):object
     {
-        $transaction=$this->transaction->transaction($id);
+        $transaction = $this->findTransaction($id);
         return $this->sendResponse($transaction, 200);
     }
 
-    public function destroy($id)
+    public function destroy($id):object
     {
-        $this->transaction::destroy($id);
-        return $this->sendResponse("Transaction has been deleted", 200);  
+        $this->deleteTransaction($id);
+        return $this->sendResponse('Transaction has been deleted', 200);
     }
 
+   
+    private function getSubscription($request):object
+    {
+        return $this->subscription->subscription($request['subscription_id'], $request['user_id']);
+    }
+
+    private function getUserProgram($program_id):object
+    {
+        return $this->program->program($program_id);
+    }
+
+    private function isProgramInactive($program):bool
+    {
+        return $program->status == 0;
+    }
+
+    private function createAndSendPoints($request):object
+    {
+        $createdPoints = $this->point->earnPoints($request);
+        return $this->sendResponse($createdPoints, 201);
+    }
+
+    private function getUser($user_id):object
+    {
+        return $this->user->user($user_id);
+    }
+
+    private function calculateNewPointsBalance($user, $pointsUsed):int
+    {
+        return $user->points - intval($pointsUsed);
+    }
+
+    private function updateUserPoints($user_id, $balance):void
+    {
+        $this->user->updatePoints($user_id, $balance);
+    }
+
+    private function getAllTransactions():object
+    {
+        return $this->transaction->all();
+    }
+
+    private function findTransaction($id):object
+    {
+        return $this->transaction->transaction($id);
+    }
+
+    private function deleteTransaction($id):void
+    {
+        $this->transaction::destroy($id);
+    }
+
+    private function getUserMerchantsPoints($user_id):array
+    {
+        $userMerchants = $this->getMerchants($user_id);
+        $merchants = [];
+
+        foreach ($userMerchants as $merchant) {
+            $pointsEarned = $this->point->pointsMerchants($user_id, $merchant->id);
+            $pointsSpent = $this->point->pointsSpentMerchant($user_id, $merchant->id);
+            $balance = $pointsEarned - $pointsSpent;
+
+            $merchants[] = [
+                'merchant_id' => $merchant->id,
+                'merchant_name' => $merchant->merchant_name,
+                'points' => intval($balance),
+            ];
+        }
+
+        return $merchants;
+    }
+
+    private function getUserMerchantsPointsEarned($user_id):array
+    {
+        $userMerchants = $this->getMerchants($user_id);
+        $merchants = [];
+
+        foreach ($userMerchants as $merchant) {
+            $pointsEarned = $this->point->pointsMerchants($user_id, $merchant->id);
+            $merchants[] = [
+                'merchant_id' => $merchant->id,
+                'merchant_name' => $merchant->merchant_name,
+                'points' => intval($pointsEarned),
+            ];
+        }
+
+        return $merchants;
+    }
+
+    private function getUserMerchantsPointsSpent($user_id):array
+    {
+        $userMerchants = $this->getMerchants($user_id);
+        $merchants = [];
+
+        foreach ($userMerchants as $merchant) {
+            $pointsSpent = $this->point->pointsSpentMerchant($user_id, $merchant->id);
+            $merchants[] = [
+                'merchant_id' => $merchant->id,
+                'merchant_name' => $merchant->merchant_name,
+                'points' => intval($pointsSpent),
+            ];
+        }
+
+        return $merchants;
+    }
+
+    private function getMerchants($user_id):array
+    {
+        $merchantIds = [];
+        $userMerchants = [];
+
+        $subscriptionPrograms = $this->subscription->userSubscriptions($user_id);
+        foreach ($subscriptionPrograms as $program) {
+            $userProgram = $this->program->program($program['program_id']);
+            $merchantIds[] = $userProgram->merchant_id;
+        }
+
+        $merchantIds = array_unique($merchantIds);
+        foreach ($merchantIds as $merchantId) {
+            $userMerchants[] = $this->merchant->merchant($merchantId);
+        }
+
+        return $userMerchants;
+    }
 }

@@ -11,19 +11,25 @@ class Controller extends BaseController
 {
     use AuthorizesRequests, DispatchesJobs, ValidatesRequests;
 
-    public function sendResponse($result, $status)
+    public function sendResponse($result, $status):object
     {
     	$response = ['message' => 'success', 'data'=> $result,'status' => $status];
         return response()->json($response, 201);
     }
 
-    public function loginResponse($access_token,$user,$expires_in,$status)
+    public function sendGetResponse($result, $status):object
+    {
+    	$response = ['message' => 'success', 'data'=> $result,'status' => $status];
+        return response()->json($response, 200);
+    }
+
+    public function loginResponse($access_token,$user,$expires_in,$status):object
     {
     	$response = ['message' => 'success','access_token' => $access_token, 'token_type' =>'Bearer','user'=> $user,'expires_in' => $expires_in,'status' => $status];
         return response()->json($response, 201);
     }
     
-    public function sendMessage($result, $status)
+    public function sendMessage($result, $status):object
     {
     	$response = [
             'message' => 'error',
@@ -33,7 +39,7 @@ class Controller extends BaseController
         return response()->json($response, $status);
     }
 
-    public function sendMessageSubscription($result, $status)
+    public function sendMessageSubscription($result, $status):object
     {
     	$response = [
             'message' => $result,
@@ -42,7 +48,7 @@ class Controller extends BaseController
         return response()->json($response, $status);
     }
 
-    public function messageSubscription($result, $status)
+    public function messageSubscription($result, $status):object
     {
     	$response = [
             'message' => $result,
@@ -51,7 +57,7 @@ class Controller extends BaseController
         return response()->json($response, $status);
     }
 
-    public function validationResponse($result, $status)
+    public function validationResponse($result, $status):object
     {
     	$response = [
             'success' => 'error',
@@ -61,7 +67,7 @@ class Controller extends BaseController
         return response()->json($response, 422);
     }
 
-    public function sucessMessage($result, $status)
+    public function sucessMessage($result, $status):object
     {
     	$response = [
             'success' => 'error',

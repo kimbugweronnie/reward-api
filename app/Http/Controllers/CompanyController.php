@@ -26,7 +26,7 @@ class CompanyController extends Controller
     }
 
    
-    public function store(CompanyRequest $request)
+    public function store(CompanyRequest $request):object
     {
         return $this->companyService->createCompany($request->validated());
     }

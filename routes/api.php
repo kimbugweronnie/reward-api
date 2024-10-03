@@ -37,13 +37,11 @@ Route::group(['middleware' => ['auth:sanctum','role:merchant']], function () {
    
     Route::get('/v2/{id}/customers',[MerchantController::class,'subscribers']);
     Route::get('/v2/{id}/programs',[MerchantController::class,'programs']);
-    Route::get('/v2/active/{id}/programs',[MerchantController::class,'activePrograms']);
-    Route::get('/v2/inactive/{id}/programs',[MerchantController::class,'inactivePrograms']);
+    Route::get('/v2/{id}/programs/active',[MerchantController::class,'activePrograms']);
+    Route::get('/v2/{id}/programs/inactive',[MerchantController::class,'inactivePrograms']);
 
-    Route::post('/v2/programs',[ProgramController::class,'store']);
-    Route::put('/v2/programs/{id}/update',[ProgramController::class,'update']); 
-    Route::delete('/v2/programs/{id}/delete',[ProgramController::class,'destroy']); 
-
+    Route::resource('/v2/programs', ProgramController::class);
+    
     Route::get('/v2/points/{id}/get-points',[MerchantController::class,'getPoints']);
     Route::get('/v2/points/{id}/redeemed',[MerchantController::class,'pointsRedeemed']);
     Route::get('/v2/points/{id}/unredeemed',[MerchantController::class,'unRedeemedPoints']);

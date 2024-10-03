@@ -35,159 +35,221 @@ class CustomerService extends Controller
         $this->customer = $customer;
     }
 
-    public function store($request)
+    public function store($request):object
     {
         try {
-            $user = $this->user->createUser($request['email'], $request['phone_number'], $request['phone_prefix'], $request['password']);
-            $customer = $this->customer->createCustomer($request['first_name'], $request['last_name'], $request['user_type'], $user['id']);
-            $role = Role::where('name', $request['user_type'])->first();
-            $user->assignRole($role);
+            $user = $this->createUser($request);
+            $customer = $this->createCustomer($request, $user);
+            $this->assignRoleToUser($user, $request['user_type']);
+
             return $this->sendResponse(new CustomerResource($customer), 201);
-        } catch (\Throwable $message) {
-            $message = 'Duplicate Email';
-            return $this->messageSubscription($message, 403);
+        } catch (\Throwable $e) {
+            return $this->handleDuplicateEmail($e);
         }
     }
 
-    public function getOtp()
+    private function createUser($request):object
     {
-        $permitted_chars = '123456789';
-        $random_number = substr(str_shuffle($permitted_chars), 0, 4);
-        return $random_number;
+        return $this->user->createUser($request['email'], $request['phone_number'], $request['phone_prefix'], $request['password']);
     }
 
-    public function sendOtp($id)
+    private function createCustomer($request, $user):object
     {
-        $basic = new \Vonage\Client\Credentials\Basic('5a0ffa3c', 'u0a0jmjbs30NP6ps');
-        $client = new \Vonage\Client($basic);
+        return $this->customer->createCustomer($request['first_name'], $request['last_name'], $request['user_type'], $user->id);
+    }
+
+    private function assignRoleToUser($user, $roleName):void
+    {
+        $role = Role::where('name', $roleName)->first();
+        $user->assignRole($role);
+    }
+
+    private function handleDuplicateEmail($e):object
+    {
+        return $this->messageSubscription('Duplicate Email', 403);
+    }
+
+    // OTP Methods
+    public function getOtp()
+    {
+        return $this->generateOtp();
+    }
+
+    private function generateOtp():int
+    {
+        $permittedChars = '123456789';
+        return substr(str_shuffle($permittedChars), 0, 4);
+    }
+
+    public function sendOtp($id):object
+    {
         $user = $this->user->customer($id);
-        $receiver = ".$this->customer->phone_prefix .$this->customer->phone_number";
-        $message = 'Your Loyalty points veritfication code is ' . $this->otp . '';
+        $receiver = $this->formatReceiver($user);
+        $message = $this->composeOtpMessage($this->otp);
+
+        return $this->sendSms($receiver, $message);
+    }
+
+    private function formatReceiver($user):string
+    {
+        return "{$user->phone_prefix}{$user->phone_number}";
+    }
+
+    private function composeOtpMessage($otp):string
+    {
+        return 'Your Loyalty points verification code is ' . $otp;
+    }
+
+    private function sendSms($receiver, $message):object
+    {
+        $client = new \Vonage\Client(new \Vonage\Client\Credentials\Basic('API_KEY', 'API_SECRET'));
         $response = $client->sms()->send(new \Vonage\SMS\Message\SMS($receiver, 'LOYALTY', $message));
+
+        return $this->handleSmsResponse($response);
+    }
+
+    private function handleSmsResponse($response):object
+    {
         $message = $response->current();
         if ($message->getStatus() == 0) {
             return $this->messageSubscription('SMS Sent Successfully', 200);
         } else {
-            return $this->messageSubscription('The message failed with status: ' . $message->getStatus() . "\n", 403);
+            return $this->messageSubscription('SMS failed with status: ' . $message->getStatus(), 403);
         }
     }
 
-    public function saveOtp($id)
+    // OTP Verification and Expiry
+    public function verifyOtp($id, $otp):object
     {
-        $user = $this->user->customer($id);
-        if ($user['is_verified'] == 0) {
-            $otp = $this->getotp();
-            $now = date('Y-m-d H:i:s');
-            $expirytime = strtotime($now . ' +5 minutes');
-            $expiry = date('Y-m-d H:i:s', $expirytime);
-            if ($this->checkOtp($id)) {
-                $updatedotp = $this->otp->updateotp($user['id'], $otp, $expiry);
-                return $this->checkOtp($id);
-            } else {
-                $newotp = $this->otp->createotp($user['id'], $otp, $expiry);
-                return $newotp;
-            }
-        } else {
-            return $this->messageSubscription('Account already verified', 200);
+        $otpRecord = $this->otp->verifyotp($id, $otp);
+
+        if ($otpRecord) {
+            return $this->handleOtpVerification($otpRecord);
         }
+
+        return $this->messageSubscription('Request an OTP', 200);
     }
 
-    public function checkOtp($id)
+    private function handleOtpVerification($otpRecord):object
     {
-        $otp = $this->otp->otp($id);
-        return $otp;
-    }
-
-    public function verifyOtp($id, $otp)
-    {
-        $otp = $this->otp->verifyotp($id, $otp);
-        if ($otp) {
-            if ($this->expiryCheck($otp->expirytime) == 'expired') {
-                $this->deleteotp($otp->id);
-                return $this->messageSubscription('OTP has expired', 200);
-            }
-            $this->user->updatecustomerstatus($otp->user_id);
-            $this->deleteotp($otp->id);
-            return $this->messageSubscription('You have been successfully verified', 200);
-        } else {
-            return $this->messageSubscription('Request an OTP', 200);
+        if ($this->isOtpExpired($otpRecord->expirytime)) {
+            $this->deleteOtp($otpRecord->id);
+            return $this->messageSubscription('OTP has expired', 200);
         }
+
+        $this->user->updatecustomerstatus($otpRecord->user_id);
+        $this->deleteOtp($otpRecord->id);
+
+        return $this->messageSubscription('You have been successfully verified', 200);
     }
 
-    public function expiryCheck($expirytime)
+    private function isOtpExpired($expiryTime):bool
     {
-        $now = strtotime(date('Y-m-d H:i:s'));
-        $expirytime = strtotime($expirytime);
-        if ($now > $expirytime) {
-            return 'expired';
-        }
+        return strtotime(date('Y-m-d H:i:s')) > strtotime($expiryTime);
     }
 
-    public function login(CustomerLoginRequest $request)
+    // Generic Helper Methods
+    public function deleteOtp($id):void
+    {
+        $this->otp::destroy($id);
+    }
+
+    // Auth Methods
+    public function login(CustomerLoginRequest $request):object
     {
         return $this->authCheck($request->email, $request->pin_code);
     }
 
-    public function authCheck($email, $pin_code)
+    private function authCheck($email, $pinCode):object
     {
-        $user = $this->customer->customerByemail($email);
+        $user = $this->getCustomerByEmail($email);
         if (!$user) {
-            return $this->messageSubscription("No user with username $email", 401);
+            return $this->messageSubscription("No user with email $email", 401);
         }
-        $user = $this->customer->customerbypincode($pin_code);
+        return $this->checkPinCode($user, $pinCode);
+    }
+
+    private function getCustomerByEmail($email):object
+    {
+        return $this->customer->customerByemail($email);
+    }
+
+    private function checkPinCode($user, $pinCode):object
+    {
+        $user = $this->customer->customerbypincode($pinCode);
+
         if (!$user) {
             return $this->messageSubscription('Wrong pin code', 401);
         }
-        if ($user->is_verified == 0) {
-            return $this->messageSubscription('Please verify your account  to continue', 401);
+
+        if (!$this->isVerified($user)) {
+            return $this->messageSubscription('Please verify your account to continue', 401);
         }
-        return $this->createToken($email);
+
+        return $this->createToken($user->email);
     }
 
-    public function createToken($email)
+    private function isVerified($user):bool
+    {
+        return $user->is_verified != 0;
+    }
+
+    private function createToken($email):object
     {
         $user = $this->user->user_by_username($email);
         $user->token = $user->createToken('anything')->plainTextToken;
+
         return $this->sendResponse(new LoginResource($user), 201);
     }
 
-    public function getCustomers()
+    // Customer management
+    public function getCustomers():object
     {
         return CustomerResource::collection($this->customer->customers());
     }
 
-    public function getCustomer($id)
+    public function getCustomer($id):object
     {
         $customer = $this->customer->customer($id);
         $user = $this->customer->userCustomer($customer->user_id);
+
         $customer->email = $user->email;
         $customer->phone_number = $user->mobile;
         $customer->phone_prefix = $user->phone_prefix;
+
         return $this->sendResponse(new SingleCustomerResource($customer), 200);
     }
 
-    public function updateCustomer($request, $id)
+    public function updateCustomer($request, $id):object
     {
         $customer = $this->customer->customer($id);
         $user = $this->user->user($id);
-        $customer->update($request->validated());
-        $user->update([
-            'phone_prefix' => $request->phone_prefix ? $request->phone_prefix : $user->phone_prefix,
-            'mobile' => $request->phone_number ? $request->phone_number : $user->phone_number,
-            'email' => $request->email ? $request->email : $user->email,
-        ]);
+
+        $this->updateCustomerData($customer, $request);
+        $this->updateUserData($user, $request);
+
         return $this->sendResponse($customer, 201);
     }
 
-    public function destroy($id)
+    private function updateCustomerData($customer, $request):void
+    {
+        $customer->update($request->validated());
+    }
+
+    private function updateUserData($user, $request):void
+    {
+        $user->update([
+            'phone_prefix' => $request->phone_prefix ?? $user->phone_prefix,
+            'mobile' => $request->phone_number ?? $user->phone_number,
+            'email' => $request->email ?? $user->email,
+        ]);
+    }
+
+    public function destroy($id):object
     {
         $this->customer::destroy($id);
         $this->user::destroy($id);
-        return $this->messageSubscription('Customer has been deleted', 200);
-    }
 
-    public function deleteOtp($id)
-    {
-        $this->otp::destroy($id);
+        return $this->messageSubscription('Customer has been deleted', 200);
     }
 }

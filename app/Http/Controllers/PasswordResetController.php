@@ -9,16 +9,18 @@ use App\Services\PasswordResetService;
 
 class PasswordResetController extends Controller
 {
+    public $passwordresetservice;
+
     public function __construct(PasswordResetService $passwordresetservice) {
         $this->passwordresetservice = $passwordresetservice; 
     }
 
-    public function forgotpassword(ForgotPasswordRequest $request)
+    public function forgotpassword(ForgotPasswordRequest $request):object
     {
         return $this->passwordresetservice->submitforgetpassword($request->validated());
     }
 
-    public function passwordreset(PasswordRequest $request)
+    public function passwordreset(PasswordRequest $request):object
     {
         return $this->passwordresetservice->passwordreset($request->email,$request->password);
     }

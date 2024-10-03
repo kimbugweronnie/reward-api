@@ -31,104 +31,201 @@ class MerchantService extends Controller
         $this->point = $point;
     }
 
-    public function createMerchant($request)
+    /**
+     * Create a merchant and assign role to user.
+     */
+    public function createMerchant($request):object
     {
         try {
-            $user = $this->user->createUser($request['email'], $request['phone_number'], $request['phone_prefix'], $request['password']);
-            $merchant = $this->merchant->createMerchant($request['merchant_name'], $request['merchant_description'],$request['location'],$request['user_type'], $user->id);
-            $role1 = Role::where('name', $request['user_type'])->first();
-            $user->assignRole($role1);
+            $user = $this->createUserForMerchant($request);
+            $merchant = $this->createMerchantRecord($request, $user);
+            $this->assignRoleToUser($user, $request['user_type']);
             return $this->sendResponse(new MerchantResource($merchant), 201);
-        } catch (\Throwable $message) {
-            $message = 'Duplicate Email';
-            return $this->messageSubscription($message, 403);
+        } catch (\Throwable $e) {
+            return $this->handleDuplicateEmailError();
         }
     }
 
-    public function getMerchants()
+    /**
+     * Get a list of all merchants.
+     */
+    public function getMerchants():object
     {
-        $merchants = MerchantResource::collection($this->merchant->all());
-        return $this->sendResponse($merchants, 200);
+        return $this->sendGetResponse(MerchantResource::collection($this->merchant->all()), 200);
     }
 
-    public function getPrograms($id)
+    /**
+     * Get programs for a given merchant.
+     */
+    public function getPrograms($id):object
     {
-        $programs = $this->program->merchantPrograms($id);
-        return $this->sendResponse(count($programs), 200);
+        return $this->sendGetResponse(count($this->getMerchantPrograms($id)), 200);
     }
 
-    public function getMerchant($id)
+    /**
+     * Get a single merchant by id.
+     */
+    public function getMerchant($id):object
     {
-        $merchant = $this->merchant->merchant($id);
-        return $this->sendResponse($merchant, 200);
+        return $this->sendGetResponse($this->findMerchantById($id), 200);
     }
 
-    public function getSubscribers($id)
+    /**
+     * Get unique subscribers of a merchant.
+     */
+    public function getSubscribers($id):object
     {
-        $uniquesubscribers = [];
-        $subscribers = $this->subscription->subscribers($id);
-        foreach ($subscribers as $subscriber) {
-            array_push($uniquesubscribers, $subscriber->user_id);
-        }
-        $subscribers = array_unique($uniquesubscribers);
-        return $this->sendResponse(count($subscribers), 200);
+        return $this->sendGetResponse(count($this->getUniqueSubscribers($id)), 200);
     }
 
-    public function activePrograms($merchant_id)
+    /**
+     * Get active programs for a merchant.
+     */
+    public function activePrograms($merchant_id):object
     {
-        $programs = $this->program->activePrograms($merchant_id);
-        return $this->sendResponse(count($programs), 200);
+        return $this->sendGetResponse(count($this->getActivePrograms($merchant_id)), 200);
     }
 
-    public function inactivePrograms($merchant_id)
+    /**
+     * Get inactive programs for a merchant.
+     */
+    public function inactivePrograms($merchant_id):object
     {
-        $programs = $this->program->inactivePrograms($merchant_id);
-        return $this->sendResponse(count($programs), 200);
+        return $this->sendGetResponse(count($this->getInactivePrograms($merchant_id)), 200);
     }
 
+    /**
+     * Get points associated with a merchant.
+     */
     public function getPoints($merchant_id)
     {
-        $points = $this->program->getPoints($merchant_id);
-        return $this->sendResponse(intval($points), 200);
+        return $this->sendGetResponse(intval($this->getMerchantPoints($merchant_id)), 200);
     }
 
-    public function unRedeemedPoints($merchant_id)
+    /**
+     * Get unredeemed points for a merchant.
+     */
+    public function unRedeemedPoints($merchant_id):object
     {
-        $points = $this->program->getPoints($merchant_id);
-        $earnedpoints = $this->point->pointsRedeemed($merchant_id);
-        $unredeemedpoints = $points - $earnedpoints;
-        return $this->sendResponse($unredeemedpoints, 200);
+        $totalPoints = $this->getMerchantPoints($merchant_id);
+        $redeemedPoints = $this->getRedeemedPoints($merchant_id);
+        $unredeemedPoints = $this->calculateUnredeemedPoints($totalPoints, $redeemedPoints);
+        return $this->sendGetResponse($unredeemedPoints, 200);
     }
 
-    public function pointsRedeemed($merchant_id)
+    /**
+     * Get redeemed points for a merchant.
+     */
+    public function pointsRedeemed($merchant_id):object
     {
-        $points = $this->point->pointsRedeemed($merchant_id);
-        return $this->sendResponse(intval($points), 200);
+        return $this->sendGetResponse(intval($this->getRedeemedPoints($merchant_id)), 200);
     }
 
-    public function expiredPoints($merchant_id)
+    /**
+     * Get expired points for a merchant.
+     */
+    public function expiredPoints($merchant_id):object
     {
-        $points = $this->program->expiredPoints($merchant_id);
-        return $this->sendResponse(intval($points), 200);
+        return $this->sendGetResponse(intval($this->getExpiredPoints($merchant_id)), 200);
     }
 
-    public function updateMerchant($request, $id)
+    /**
+     * Update a merchant's details.
+     */
+    public function updateMerchant($request, $id):object
     {
-        $merchant = $this->merchant->merchant($id);
-        $user = $this->user->user($id);
+        $merchant = $this->findMerchantById($id);
         $merchant->update($request->validated());
-        $user->update([
-            'phone_prefix' => $request->phone_prefix ? $request->phone_prefix : $user->phone_prefix,
-            'mobile' => $request->phone_number ? $request->phone_number : $user->phone_number,
-            'email' => $request->email ? $request->email : $user->email,
-        ]);
         return $this->sendResponse($merchant, 201);
     }
 
-    public function destroy($id)
+    /**
+     * Delete a merchant and its user.
+     */
+    public function destroy($id):object
+    {
+        $this->deleteMerchantAndUser($id);
+        return $this->messageSubscription('Merchant has been deleted', 200);
+    }
+
+ 
+    private function createUserForMerchant($request):object
+    {
+        return $this->user->createUser($request['email'], $request['phone_number'], $request['phone_prefix'], $request['password']);
+    }
+
+    private function createMerchantRecord($request, $user):object
+    {
+        return $this->merchant->createMerchant(
+            $request['merchant_name'],
+            $request['merchant_description'],
+            $request['location'],
+            $request['user_type'],
+            $user->id
+        );
+    }
+
+    private function assignRoleToUser($user, $roleName):void
+    {
+        $role = Role::where('name', $roleName)->first();
+        $user->assignRole($role);
+    }
+
+    private function handleDuplicateEmailError():object
+    {
+        return $this->messageSubscription('Duplicate Email', 403);
+    }
+
+    private function getMerchantPrograms($id):object
+    {
+        return $this->program->merchantPrograms($id);
+    }
+
+    private function findMerchantById($id):object
+    {
+        return $this->merchant->merchant($id);
+    }
+
+    private function getUniqueSubscribers($merchant_id):array
+    {
+        $subscribers = $this->subscription->subscribers($merchant_id);
+        $uniqueSubscribers = array_unique(array_column($subscribers->toArray(), 'user_id'));
+        return $uniqueSubscribers;
+    }
+
+    private function getActivePrograms($merchant_id):object
+    {
+        return $this->program->activePrograms($merchant_id);
+    }
+
+    private function getInactivePrograms($merchant_id):object
+    {
+        return $this->program->inactivePrograms($merchant_id);
+    }
+
+    private function getMerchantPoints($merchant_id):object
+    {
+        return $this->program->getPoints($merchant_id);
+    }
+
+    private function getRedeemedPoints($merchant_id):object
+    {
+        return $this->point->pointsRedeemed($merchant_id);
+    }
+
+    private function calculateUnredeemedPoints($totalPoints, $redeemedPoints):int
+    {
+        return $totalPoints - $redeemedPoints;
+    }
+
+    private function getExpiredPoints($merchant_id):object
+    {
+        return $this->program->expiredPoints($merchant_id);
+    }
+
+    private function deleteMerchantAndUser($id):void
     {
         $this->merchant::destroy($id);
         $this->user::destroy($id);
-        return $this->messageSubscription('Merchant has been deleted', 200);
     }
 }

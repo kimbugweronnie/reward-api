@@ -4,21 +4,16 @@ use App\Models\User;
 use App\Models\Merchant;
 use App\Models\Program;
 use App\Models\Customer;
-use App\Models\UserVerfiy;
+use App\Models\UserVerify;
 use App\Models\Subscription;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 use App\Http\Requests\UserLoginRequest;
-
 use Illuminate\Support\Facades\Auth;
 use App\Http\Resources\UserResource;
-use App\Http\Resources\LoginResource;
-use App\Http\Resources\CustomerResource;
-use App\Http\Resources\CustomerLoginResource;
 use App\Http\Controllers\Controller;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
-use App\Mail\EmailVerificationMail;
-use Illuminate\Support\Facades\Mail;
+
 
 class UserService extends Controller
 {
@@ -30,7 +25,7 @@ class UserService extends Controller
     private $merchant;
     public $role;
 
-    public function __construct(User $user, Role $role, UserVerfiy $userverify, Customer $customer, Subscription $subscription, Program $program, Merchant $merchant)
+    public function __construct(User $user, Role $role, UserVerify $userverify, Customer $customer, Subscription $subscription, Program $program, Merchant $merchant)
     {
         $this->user = $user;
         $this->role = $role;
@@ -41,126 +36,196 @@ class UserService extends Controller
         $this->merchant = $merchant;
     }
 
-    public function registration($request, $phone_number)
+    /**
+     * Handle user registration
+     */
+    public function registration($request):object
     {
-        $user = $this->user->createUser($request, $phone_number);
+        $user = $this->createUser($request);
+        $role = $this->fetchRole($request);
+        $userVerify = $this->createUserVerify($user);
+        $user->assignRole($role);
 
-        $role1 = Role::where('name', $request['user_type'])->first();
-        $user->assignRole($role1);
-        $userverify = $this->userverify->create_record($user->id);
-        $url = url($userverify->token);
-        // Mail::to($user->email)->send(new EmailVerificationMail($url));
         return $this->sendResponse(new UserResource($user), 201);
     }
 
-    public function login(UserLoginRequest $request)
+    /**
+     * Create a new user
+     */
+    public function createUser($request):object
     {
-        return $this->authCheck($request->email, $request->password);
+        return $this->user->create([
+            'email' => $request['email'],
+            'mobile' => $request['phone_number'],
+            'phone_prefix' => $request['phone_prefix'],
+            'password' => bcrypt($request['password']),
+        ]);
     }
 
-    public function authCheck($email, $password)
+    /**
+     * Create verification record for a user
+     */
+    public function createUserVerify($user):object
     {
-        $user = $this->user->userbyemail($email);
-        if (!$user) {
-            return $this->messageSubscription('Wrong Credentials', 401);
-        }
-        if (Auth::attempt(['email' => $email, 'password' => $password]) == 0) {
-            return $this->messageSubscription('Wrong Password', 401);
-        } else {
-            return $this->createToken($email);
-        }
+        $userverify = $this->userverify->create(['user_id' => $user->id, 'token' => Str::random(60)]);
+        $this->sendVerificationEmail($userverify);
+        return $userverify;
     }
 
-    public function createToken($email)
+    /**
+     * Fetch the role for a user
+     */
+    public function fetchRole($user_type):object
     {
-        $programs = $this->program->programs();
-        $now = strtotime(date('Y-m-d H:i:s'));
-        foreach ($programs as $program) {
-            $expirytime = strtotime($program->due_date);
-            if ($now > $expirytime) {
-                $this->program->deactivateProgram($program->id);
-                $this->program->expireProgram($program->id);
-            }
-        }
-        $user = $this->user->userByemail($email);
-        $customer = $this->customer->customerUser($user['id']);
-        $merchant = $this->merchant->merchantUser($user['id']);
-        $accesstoken = auth()
-            ->user()
-            ->createToken('Anything', ['*'], now()->addMinutes(240), $user->id, 'App\\Models\\User');
+        return Role::where('name', $user_type)->first();
+    }
 
-        $user->access_token = $accesstoken->plainTextToken;
-        $user->expires_in = 3600;
+    /**
+     * Handle login request
+     */
+    public function login($request):object
+    {
+        return $this->authenticate($request->email, $request->password);
+    }
+
+    /**
+     * Authenticate user credentials
+     */
+    public function authenticate($email, $password):object
+    {
+        if (!$user = $this->attemptLogin($email, $password)) {
+            return $this->messageSubscription('Wrong credentials', 401);
+        }
+
+        return $this->generateAccessToken($user);
+    }
+
+    /**
+     * Attempt to log the user in
+     */
+    public function attemptLogin($email, $password):object
+    {
+        if (!Auth::attempt(['email' => $email, 'password' => $password])) {
+            return null;
+        }
+        return $this->user->where('email', $email)->first();
+    }
+
+    /**
+     * Generate access token for the authenticated user
+     */
+    public function generateAccessToken($user):array
+    {
+        $tokenResult = $user->createToken('AccessToken', ['*']);
+        $details = $this->getCustomerDetails($user->id);
+        return [
+            'token' => $tokenResult->plainTextToken,
+            'details' => $details
+        ];
+    }
+
+    /**
+     * Fetch user details by email
+     */
+    private function userByEmail($email):object
+    {
+        return $this->user->where('email', $email)->first();
+    }
+
+    /**
+     * Fetch customer details for a user
+     */
+    public function getCustomerDetails($userId):object
+    {
+        $customer = $this->customer->customerUser($userId);
+        $merchant = $this->merchant->merchantUser($userId);
         if ($customer) {
-            $userdetails = [
-                'id' => $user->id,
-                'name' => $customer->first_name . ' ' . $customer->last_name,
-                'email' => $user->email,
-                'user_type' => $merchant ? $merchant->user_type : $customer->user_type,
-            ];
-            return $this->loginResponse($user->access_token, $userdetails, $user->expires_in, 201);
+            return $this->prepareCustomerResponse($customer);
         } elseif ($merchant) {
-            $userdetails = [
-                'id' => $user->id,
-                'name' => $merchant->merchant_name,
-                'email' => $user->email,
-                'user_type' => $merchant ? $merchant->user_type : $customer->user_type,
-            ];
-            return $this->loginResponse($user->access_token, $userdetails, $user->expires_in, 201);
+            return $this->prepareMerchantResponse($merchant);
         } else {
-            return $this->messageSubscription('Wrong Credentials', 401);
+            return $this->messageSubscription('User details not found', 404);
         }
     }
 
-    public function getPrograms($id)
+    /**
+     * Prepare customer response
+     */
+    private function prepareCustomerResponse($customer):array
+    {
+        return [
+            'id' => $customer->id,
+            'name' => $customer->first_name . ' ' . $customer->last_name,
+            'email' => $customer->email,
+            'user_type' => 'customer'
+        ];
+    }
+
+    /**
+     * Prepare merchant response
+     */
+    public function prepareMerchantResponse($merchant):array
+    {
+        return [
+            'id' => $merchant->id,
+            'name' => $merchant->merchant_name,
+            'user_type' => 'merchant'
+        ];
+    }
+
+    /**
+     * Get user programs
+     */
+    public function getPrograms($userId):array
     {
         $programs = [];
-        $subscriptionprograms = $this->subscription->userSubscriptions($id);
-        foreach ($subscriptionprograms as $program) {
-            $userprogram = $this->program->program($program['program_id']);
-            array_push($programs, $userprogram);
+        foreach ($this->subscriptionPrograms($userId) as $program) {
+            $programs[] = $this->userProgram($program['program_id']);
         }
         return $programs;
     }
 
-    public function getMerchants($id)
+    /**
+     * Fetch subscription programs for a user
+     */
+    private function subscriptionPrograms($userId):object
     {
-        $merchantids = [];
-        $usermerchants = [];
-        $subscriptionprograms = $this->subscription->userSubscriptions($id);
-        foreach ($subscriptionprograms as $program) {
-            $userprogram = $this->program->program($program['program_id']);
-            array_push($merchantids, $userprogram->merchant_id);
+        return $this->subscription->userSubscriptions($userId);
+    }
+
+    /**
+     * Fetch specific program for a user
+     */
+    public function userProgram($programId):object
+    {
+        return $this->program->program($programId);
+    }
+
+    /**
+     * Get user merchants
+     */
+    public function getMerchants($userId):array
+    {
+        $merchantIds = [];
+        $userMerchants = [];
+
+        foreach ($this->subscriptionPrograms($userId) as $program) {
+            $merchantIds[] = $this->userProgram($program['program_id'])->merchant_id;
         }
-        $merchants = array_unique($merchantids);
-        foreach ($merchants as $merchant) {
-            array_push($usermerchants, $this->merchant->merchant($merchant));
+
+        foreach (array_unique($merchantIds) as $merchantId) {
+            $userMerchants[] = $this->merchant->merchant($merchantId);
         }
-        return $usermerchants;
+
+        return $userMerchants;
     }
 
-    public function getCustomers()
+    /**
+     * Delete user
+     */
+    public function destroy($id):object
     {
-        $role = 'customer';
-        return $this->sendResponse($this->user->customers($role), 200);
-    }
-
-    public function getCustomer($id)
-    {
-        $user = $this->user->customer($id);
-        return $this->sendResponse(new CustomerResource($user), 200);
-    }
-
-    public function updateCustomer($request, $id)
-    {
-        $user = $this->user->customer($id);
-        $user->update($request->validated());
-        return $this->sendResponse(new CustomerResource($user), 200);
-    }
-
-    public function destroy($id)
-    {
-        $this->user::destroy($id);
-        return $this->messageSubscription('User has been deleted', 200);
+        $this->user->destroy($id);
+        return $this->messageSubscription('User deleted successfully', 200);
     }
 }

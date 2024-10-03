@@ -8,44 +8,116 @@ use App\Http\Resources\ProgramResource;
 use App\Http\Controllers\Controller;
 use Illuminate\Support\Str;
 
-
 class ProgramService extends Controller
 {
     private $program;
 
-    public function __construct(Program $program) {
+    public function __construct(Program $program)
+    {
         $this->program = $program;
     }
 
-    public function createProgram($request)
+    /**
+     * Create a new program
+     */
+    public function createProgram($request):object
     {
-        $program = $this->program->createprogram($request);
-        return $this->sendResponse($program, 200);
+        try {
+            $program = $this->createProgramRecord($request);
+            return $this->sendResponse($program, 201);
+        } catch (\Exception $e) {
+            return $this->handleError($e, 'Error creating program');
+        }
     }
 
-    public function getPrograms()
+    /**
+     * Get all programs
+     */
+    public function getPrograms():object
     {
-        $programs = $this->program->all();  
-        return $this->sendResponse(ProgramResource::collection($programs), 200);
+        $programs = $this->getAllPrograms();
+        return $this->sendGetResponse(ProgramResource::collection($programs), 200);
     }
 
-    public function getProgram($id)
+    /**
+     * Get a single program by id
+     */
+    public function getProgram($id):object
     {
-        $program=$this->program->program($id);
-        return $this->sendResponse(new ProgramResource($program), 200);
+        $program = $this->findProgramById($id);
+        return $this->sendGetResponse(new ProgramResource($program), 200);
     }
 
-    public function updateProgram($request,$id)
-    { 
-        $program=$this->program->program($id);
+    /**
+     * Update a program
+     */
+    public function updateProgram($request, $id):object
+    {
+        try {
+            $program = $this->findProgramById($id);
+            $this->updateProgramRecord($program, $request);
+            return $this->sendResponse($program, 201);
+        } catch (\Exception $e) {
+            return $this->handleError($e, 'Error updating program');
+        }
+    }
+
+    /**
+     * Delete a program by id
+     */
+    public function destroy($id):object
+    {
+        $this->deleteProgram($id);
+        return $this->messageSubscription('Program has been deleted', 200);
+    }
+
+   
+
+    /**
+     * Create program record
+     */
+    private function createProgramRecord($request):object
+    {
+        return $this->program->createprogram($request);
+    }
+
+    /**
+     * Fetch all programs
+     */
+    private function getAllPrograms():object
+    {
+        return $this->program->all();
+    }
+
+    /**
+     * Find program by ID
+     */
+    private function findProgramById($id):object
+    {
+        return $this->program->program($id);
+    }
+
+    /**
+     * Update program record
+     */
+    private function updateProgramRecord($program, $request):void
+    {
         $program->update($request->validated());
-        return $this->sendResponse($program, 200);
     }
-    
-    public function destroy($id)
+
+    /**
+     * Delete program record
+     */
+    private function deleteProgram($id):void
     {
         $this->program::destroy($id);
-        return $this->messageSubscription("Program has been deleted", 200);  
     }
 
+    /**
+     * Handle any errors
+     */
+    private function handleError(\Exception $e, $message):object
+    {
+        return $this->messageSubscription($message, 500);
+    }
 }

@@ -13,7 +13,7 @@ class CompanyService extends Controller
         $this->company = $company;
     }
 
-    public function createCompany($request)
+    public function createCompany($request):object
     {
         $company = $this->company->createCompany($request);
         return $this->sendResponse($company, 201);

@@ -8,7 +8,7 @@ use Spatie\Permission\Traits\HasRoles;
 
 class Merchant extends Model
 {
-    use HasRoles;
+    use HasRoles, HasFactory;
     protected $guard_name = ['merchant'];
     protected $fillable = ['merchant_name', 'merchant_description', 'user_type', 'location', 'user_id'];
 
@@ -19,12 +19,12 @@ class Merchant extends Model
 
     public function userMerchant($user_id)
     {
-        return User::where('id', $user_id)->select('email', 'mobile', 'phone_prefix')->first();
+        return User::where('id', $user_id)->select('id','email', 'mobile', 'phone_prefix')->first();
     }
 
     public function merchantUser($id)
     {
-        return $this::where('user_id', $id)->select('merchant_name', 'user_type')->first();
+        return $this::where('user_id', $id)->select('id','merchant_name', 'user_type')->first();
     }
 
     public function createMerchant($merchant_name, $merchant_description, $user_type, $location, $user_id)

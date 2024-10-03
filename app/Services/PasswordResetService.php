@@ -19,7 +19,7 @@ class PasswordResetService extends Controller
         $this->user = $user;
     }
 
-    public function submitforgetpassword($email)
+    public function submitforgetpassword($email):object
     {
         $passwordreset = $this->passwordreset->create_record($email); 
         $user = $this->user->user_by_email($email);
@@ -28,7 +28,7 @@ class PasswordResetService extends Controller
         return $this->send_response("Email has been sent ", 201);  
     }
 
-    public function passwordreset($email,$password)
+    public function passwordreset($email,$password):object
     {
         $this->user::where('email','=',$email)->update(['password' =>$password]);
         $this->passwordreset->delete_by_email($email);

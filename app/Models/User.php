@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
+use Illuminate\Support\Facades\Hash;
 
 class User extends Authenticatable
 {
@@ -92,9 +93,9 @@ class User extends Authenticatable
         return $this::where('id',$id)->first();  
     }
 
-    public function userByEmail($email)
+    public function userByEmail($request)
     {
-        return $this::where('email',$email)->orwhere('email',$email)->first();  
+        return $this::where('email',$request->email)->orwhere('email',$request->email)->first();  
     }
 
     public function updatePassword($email,$password)

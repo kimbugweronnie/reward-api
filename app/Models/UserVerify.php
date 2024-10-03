@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Str;
 
-class UserVerfiy extends Model
+class UserVerify extends Model
 {
     use HasFactory;
     protected $table = 'users_verify';
