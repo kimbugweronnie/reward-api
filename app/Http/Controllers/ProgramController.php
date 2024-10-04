@@ -15,27 +15,27 @@ class ProgramController extends Controller
         $this->programservice = $programservice; 
     }
    
-    public function index()
+    public function index():object
     {
         return $this->programservice->getPrograms();
     }
 
-    public function store(ProgramRequest $request)
+    public function store(ProgramRequest $request):object
     {
         return $this->programservice->createProgram($request->validated());
     }
 
-    public function show($id)
+    public function show($id):object
     {
         return $this->programservice->getProgram($id);
     }
 
-    public function update(ProgramUpdateRequest $request, $id)
+    public function update(ProgramUpdateRequest $request, $id):object
     {
         return $this->programservice->updateProgram($request,$id);
     }
 
-    public function destroy($id)
+    public function destroy($id):object
     {
         return $this->programservice->destroy($id);
     }
